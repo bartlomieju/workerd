@@ -224,9 +224,10 @@ DecodedException decodeTunneledException(
       setRemoteError(isolate, result.handle);
     }
 
-    if (exception.getType() == kj::Exception::Type::DISCONNECTED) {
+    if (isRetryable(exception)) {
       setRetryableError(isolate, result.handle);
-    } else if (exception.getType() == kj::Exception::Type::OVERLOADED) {
+    }
+    if (exception.getType() == kj::Exception::Type::OVERLOADED) {
       setOverloadedError(isolate, result.handle);
     }
 

@@ -161,6 +161,24 @@ bool isExceptionFromInputGateBroken(kj::StringPtr description);
 
 constexpr kj::Exception::DetailTypeId EXCEPTION_IS_USER_ERROR = 0x82aff7d637c30e47ull;
 
+// Set on an exception of a type other than DISCONNECTED, whose operation is worth retrying. Says
+// nothing about whether a retry is safe: for actor calls, delivery markers such as
+// REQUEST_DELIVERED_TO_ACTOR_DETAIL_ID decide that. The payload is a zero-length array (marker
+// only).
+constexpr kj::Exception::DetailTypeId EXCEPTION_IS_RETRYABLE = 0xb9e1d0c9dba8b3bbull;
+
+inline void markRetryable(kj::Exception& exception) {
+  exception.setDetail(EXCEPTION_IS_RETRYABLE, kj::heapArray<kj::byte>(0));
+}
+
+// Whether the operation that failed with `exception` is worth retrying. DISCONNECTED exceptions are
+// retryable by convention; EXCEPTION_IS_RETRYABLE extends that to other types. JavaScript sees
+// these errors with `retryable` set to true.
+inline bool isRetryable(const kj::Exception& exception) {
+  return exception.getType() == kj::Exception::Type::DISCONNECTED ||
+      exception.getDetail(EXCEPTION_IS_RETRYABLE) != kj::none;
+}
+
 // Set when a Durable Object execution was terminated by a call to state.abort().
 constexpr kj::Exception::DetailTypeId EXCEPTION_DURABLE_OBJECT_ABORT = 0x2900166d61b404a7ull;
 
