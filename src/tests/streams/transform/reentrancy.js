@@ -258,10 +258,11 @@ export const readableCancelInsideSize = {
 // with a transform() that enqueues. TypeScript's hook paths follow the
 // spec (TransformStreamDefaultControllerEnqueue step 5): the write
 // rejects with the closed readable's stored error, undefined, and the
-// writable is errored with e2. Its zero-hook path rejects the write with
-// e2, and the cancel errors the writable with its reason. DIVERGENCE
-// (#23): C++ swallows the throw (#20), so the write fulfills and the
-// writable is errored with the cancel reason.
+// writable is errored with e2. Its zero-hook path settles the write as
+// one that reaches the sink after a cancel (#19, #22): the cancel errors
+// the writable with its reason, and the write rejects with it.
+// DIVERGENCE (#23): C++ swallows the throw (#20), so the write fulfills
+// and the writable is errored with the cancel reason.
 export const readableCancelInsideThrowingSize = {
   async test() {
     for (const hooks of ['none', 'flush', 'transform']) {
@@ -296,7 +297,7 @@ export const readableCancelInsideThrowingSize = {
         strictEqual(write.status, 'fulfilled', hooks);
         strictEqual(closed.reason, reason, hooks);
       } else if (hooks === 'none') {
-        strictEqual(write.reason, e2, hooks);
+        strictEqual(write.reason, reason, hooks);
         strictEqual(closed.reason, reason, hooks);
       } else {
         strictEqual(write.status, 'rejected', hooks);

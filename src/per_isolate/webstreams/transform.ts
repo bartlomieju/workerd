@@ -554,7 +554,20 @@ class TransformStream<I = unknown, O = unknown> {
           }
         }
         const rc = this.#readableController as object;
-        readableControllerEnqueue(rc, chunk);
+        try {
+          readableControllerEnqueue(rc, chunk);
+        } catch (e) {
+          // With the finish promise set, a readable.cancel() closed the
+          // readable, before this write reached the sink or from inside
+          // size(); close and abort wait for this write. The cancel errors
+          // the writable when it settles, so reject as the standard path's
+          // cleared-algorithms check does. Checking here rather than
+          // before the enqueue keeps the check off the per-write path.
+          const finishPromise = this.#finishPromise;
+          if (finishPromise === undefined) throw e;
+          await PromisePrototypeThen(finishPromise, undefined, () => {});
+          throw writableInternals.getStoredError(this.#writable);
+        }
         const desiredSize = readableControllerDesiredSizeGet(rc);
         const backpressure = desiredSize !== null && desiredSize <= 0;
         if (backpressure !== this.#backpressure) {
