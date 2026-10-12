@@ -2556,14 +2556,8 @@ Module::EvaluateCallback Module::newJsonModuleHandler(kj::ArrayPtr<const char> d
 
 Module::EvaluateCallback Module::newWasmModuleHandler(
     kj::ArrayPtr<const kj::byte> data, kj::Maybe<v8::CompiledWasmModule> maybeCompiled) {
-  struct Cache final {
-    kj::MutexGuarded<kj::Maybe<v8::CompiledWasmModule>> mutex;
-  };
-  auto cache = kj::heap<Cache>();
-  KJ_IF_SOME(compiled, maybeCompiled) {
-    *cache->mutex.lockExclusive() = kj::mv(compiled);
-  }
-  return [data, cache = kj::mv(cache)](Lock& js, const Url& id, const ModuleNamespace& ns,
+  auto holder = kj::heap<CompiledWasmModuleHolder>(kj::mv(maybeCompiled));
+  return [data, holder = kj::mv(holder)](Lock& js, const Url& id, const ModuleNamespace& ns,
              const CompilationObserver& observer) mutable -> bool {
     return js.tryCatch([&]() -> bool {
       // Wasm compilation requires code-generation permission. The scope
@@ -2579,22 +2573,7 @@ Module::EvaluateCallback Module::newWasmModuleHandler(
       // compiles fast but runs slower.
       AllowV8BackgroundThreadsScope scope;
 
-      {
-        // See if we can use a cached compiled module to speed things up.
-        auto lock = cache->mutex.lockShared();
-        KJ_IF_SOME(compiled, *lock) {
-          auto metrics = observer.onWasmCompilationFromCacheStart(js.v8Isolate);
-          auto result =
-              JsValue(check(v8::WasmModuleObject::FromCompiledModule(js.v8Isolate, compiled)));
-          return ns.setDefault(js, result);
-        }
-      }
-
-      auto module = jsg::compileWasmModule(js, data, observer);
-      auto lock = cache->mutex.lockExclusive();
-      *lock = module->GetCompiledModule();
-      auto result = JsValue(module);
-      return ns.setDefault(js, result);
+      return ns.setDefault(js, JsValue(holder->getOrCompile(js, data, observer)));
     }, [&](Value exception) {
       js.v8Isolate->ThrowException(exception.getHandle(js));
       return false;

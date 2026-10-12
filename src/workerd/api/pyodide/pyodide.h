@@ -35,10 +35,23 @@ class PyodideBundleManager {
   void setPyodideBundleData(kj::String version, kj::Array<unsigned char> data) const;
   const kj::Maybe<jsg::Bundle::Reader> getPyodideBundle(kj::StringPtr version) const;
 
+  // Returns the holder for the compiled pyodide.asm.wasm of bundle `version`, or kj::none if that
+  // bundle is not loaded. Registering the bundle with this holder lets every Python isolate after
+  // the first reuse the compiled module, even when no earlier Python isolate is still alive.
+  kj::Maybe<const jsg::CompiledWasmModuleHolder&> getPyodideWasmModuleHolder(
+      kj::StringPtr version) const;
+
  private:
   struct MessageBundlePair {
     kj::Own<capnp::FlatArrayMessageReader> messageReader;
     jsg::Bundle::Reader bundle;
+
+    // Bundles are never removed, so each release loaded into the process keeps its compiled
+    // pyodide.asm.wasm for the manager's lifetime (the process lifetime in production): V8's
+    // copy of the wire bytes (about 10 MB for current releases) plus the machine code generated
+    // for them. An Own, because registries refer to the holder while the map may relocate its
+    // entries.
+    kj::Own<jsg::CompiledWasmModuleHolder> wasmModuleHolder;
   };
   const kj::MutexGuarded<kj::HashMap<kj::String, MessageBundlePair>> bundles;
 };
