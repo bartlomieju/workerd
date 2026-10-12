@@ -40,7 +40,6 @@ wd_cc_library(
         "io-own.c++",
         "io-util.c++",
         "legacy-hibernation-manager.c++",
-        "per-isolate-bootstrap.c++",
         "stored-value.c++",
         "trace-stream.c++",
         "tracer.c++",
@@ -55,7 +54,6 @@ wd_cc_library(
         "io-own.h",
         "io-util.h",
         "legacy-hibernation-manager.h",
-        "per-isolate-bootstrap.h",
         "stored-value.h",
         "trace-stream.h",
         "tracer.h",
@@ -669,16 +667,6 @@ kj_test(
 
 kj_test(
     src = "io-context-abort-test.c++",
-    deps = [
-        ":io",
-        "//src/workerd/tests:test-fixture",
-    ],
-)
-
-kj_test(
-    src = "per-isolate-compile-cache-test.c++",
-    # Downstream users may set their own flags, which breaks this test.
-    tags = ["no-downstream"],
     deps = [
         ":io",
         "//src/workerd/tests:test-fixture",
