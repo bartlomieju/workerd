@@ -417,6 +417,24 @@ KJ_TEST("actor fetch marks other not-delivered rejections from the claim as deli
   KJ_EXPECT(e.getDetail(jsg::REQUEST_DELIVERED_TO_ACTOR_DETAIL_ID) != kj::none, e);
 }
 
+KJ_TEST("actor fetch marks retryable failures of any type as delivered") {
+  // A retryable failure that passes through the actor must not make its caller retry the actor.
+  auto observer = kj::refcounted<RetryClaimObserver>();
+  auto rejection = KJ_EXCEPTION(FAILED, "jsg.Error: retryable failure");
+  jsg::markRetryable(rejection);
+  jsg::markActorRequestNotDelivered(rejection);
+  observer->rejection = kj::mv(rejection);
+  TestFixture fixture(recordingActorParams(*observer));
+  TestResponse response;
+
+  auto e = KJ_ASSERT_NONNULL(sendFetch(fixture, response));
+
+  KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED, e);
+  KJ_EXPECT(jsg::isRetryable(e), e);
+  KJ_EXPECT(e.getDetail(jsg::REQUEST_NOT_DELIVERED_TO_ACTOR_DETAIL_ID) == kj::none, e);
+  KJ_EXPECT(e.getDetail(jsg::REQUEST_DELIVERED_TO_ACTOR_DETAIL_ID) != kj::none, e);
+}
+
 KJ_TEST("fetch claims once even without a fetch handler") {
   // The claim precedes the handler lookup, so a worker without a fetch handler still claims, once,
   // before the request fails.
