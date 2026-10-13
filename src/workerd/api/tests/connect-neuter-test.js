@@ -9,29 +9,32 @@
 import { strictEqual, rejects } from 'assert';
 
 let writeRejected = false;
+let lateWrite;
 
 export default {
   async connect(socket, env, ctx) {
     const writer = socket.writable.getWriter();
 
-    ctx.waitUntil(
-      (async () => {
-        // Allow connect to return before attempting the write. This should result in the stream
-        // being neutered.
-        await scheduler.wait(0);
+    lateWrite = (async () => {
+      // Yield until connect returns, resuming through this handler's I/O context.
+      await scheduler.wait(0);
 
-        await rejects(
-          async () => await writer.write(new Uint8Array([0x41, 0x42])),
-          {
-            name: 'TypeError',
-            message:
-              "Can't read from request stream because client disconnected.",
-          }
-        );
+      await rejects(
+        async () => await writer.write(new Uint8Array([0x41, 0x42])),
+        (error) => {
+          strictEqual(error.name, 'TypeError', error.stack);
+          strictEqual(
+            error.message,
+            "Can't read from request stream because client disconnected.",
+            error.stack
+          );
+          return true;
+        }
+      );
 
-        writeRejected = true;
-      })()
-    );
+      writeRejected = true;
+    })();
+    ctx.waitUntil(lateWrite);
 
     return;
   },
@@ -44,8 +47,7 @@ export const connectNeuterRegression = {
     // The destination will close the socket when its `connect` returns.
     await socket.closed;
 
-    // Give time for the late-write to be attempted.
-    await scheduler.wait(10);
+    await lateWrite;
 
     strictEqual(writeRejected, true, 'write must throw on a neutered stream');
   },
