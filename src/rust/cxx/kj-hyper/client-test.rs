@@ -33,11 +33,12 @@ fn a_fixed_client_dials_through_its_dialer_and_sends_the_url_as_given() {
     runtime().block_on(async {
         let (ours, theirs) = duplex(1 << 16);
         let dialed = Mutex::new(Some(ours));
-        let client = Client::new(&table, ClientSettings::default(), Peer::Origin, move || {
+        let pool = ClientPool::new(ClientSettings::default(), Peer::Origin, move || {
             let io = dialed.lock().unwrap().take();
             let io = io.map(|io| Dialed::with_hangup(io, Box::pin(pending())));
             async move { io.ok_or_else(|| io::Error::other("dialed twice")) }
         });
+        let client = pool.client(&table);
         let mut head = Head::empty();
         head.set(Builtin::Host, http::HeaderValue::from_static("example.com"));
         let (uri, host) = client.target(b"/path?q=1").unwrap();
@@ -69,7 +70,7 @@ fn a_fixed_client_dials_through_its_dialer_and_sends_the_url_as_given() {
 fn an_internet_client_sets_the_host_from_the_url() {
     let table = HeaderTable::builtin();
     let connect = |host: String, port| async move { connect_allowed(&host, port, |_| true).await };
-    let client = Client::internet(&table, ClientSettings::default(), None, connect);
+    let client = ClientPool::internet(ClientSettings::default(), None, connect).client(&table);
     let (uri, host) = client.target(b"https://example.com:8443/p").unwrap();
     assert_eq!(uri.scheme_str(), Some("https"));
     assert_eq!(host.unwrap(), "example.com:8443");
@@ -90,7 +91,7 @@ fn an_internet_client_connects_to_the_urls_host_through_its_connect() {
                 TcpStream::connect(address)
             }
         };
-        let client = Client::internet(&table, ClientSettings::default(), None, connect);
+        let client = ClientPool::internet(ClientSettings::default(), None, connect).client(&table);
         let (uri, _) = client.target(b"http://example.com:8080/p").unwrap();
         let request =
             Client::request_of(http::Method::GET, uri, Head::empty(), ChannelBody::empty());
